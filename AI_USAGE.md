@@ -10,6 +10,10 @@ by removing the capability rather than instructing against it. Retrieval is
 keyword, not embeddings. Claude wrote the code for those decisions, and the
 tests.
 
+The frontend is mostly Claude's code. The design calls there were mine
+
 I reviewed each change before it went in and rejected several, mostly where a
-fix was proposed as a prompt instruction when the assignment calls for
-enforcement in the data and tool layer.
+fix was proposed as a prompt instruction.
+
+I did all the testing myself against the running app, which is how the four
+defects listed at the end of PRODUCT.md were found.
