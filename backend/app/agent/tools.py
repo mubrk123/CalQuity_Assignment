@@ -11,7 +11,8 @@ from app.config import (ASSUMPTION_NOTES, TIER_CURRENT_POLICY, TIER_LABELS,
 from app.corpus.search import search, superseded_pairs
 from app.data.store import Order, Ticket
 from app.domain import cancellation, credit, known_issues, precedence, sla
-from app.security.session import AccessDenied, Principal, ScopedStore
+from app.security.session import (AccessDenied, CAPABILITIES, Principal,
+                                  ScopedStore)
 from app.sources import terms
 
 NOT_FOUND = {
@@ -647,6 +648,38 @@ class Toolbox:
             }
         return None
 
+    def t_my_permissions(self) -> dict:
+        """What this caller may do, read from the map that enforces it."""
+        # Asked "am I allowed to see this?", the model answered from the role
+        # name in its prompt and told a support agent they had "full access".
+        # They cannot authorise a credit over the approval limit. Permissions
+        # are now reported from CAPABILITIES, the same structure the checks use.
+        caps = CAPABILITIES[self.principal.role]
+        limit = terms.policy_defaults()["approval_and_uncertainty"]["manager_approval_above_inr"]
+        can, cannot = [], []
+        for label, cap in (
+            ("see every account's records", "read_any_account"),
+            ("see only their own account's records", "read_own_account"),
+            ("read past ticket history (unverified)", "read_ticket_history"),
+            ("see the operations dashboard", "view_operations_dashboard"),
+            ("draft an escalation", "request_escalation"),
+            ("draft a ticket update", "update_ticket"),
+            ("draft a follow-up task", "create_followup_task"),
+            (f"authorise a credit above INR {limit:,}", "approve_credit"),
+        ):
+            (can if cap in caps else cannot).append(label)
+        return {
+            "user": self.principal.display_name or self.principal.user_id,
+            "role": self.principal.role.value.replace("_", " "),
+            "account": self.principal.account_id,
+            "can": can,
+            "cannot": cannot,
+            "always_true": (
+                "Every action is a draft until a human confirms it in the "
+                "interface. No role can make this assistant execute one."
+            ),
+        }
+
     def t_list_actions(self) -> dict:
         """Escalations, credits and updates this principal can see."""
         acts = ACTIONS.visible(self.principal)
@@ -713,6 +746,13 @@ class Toolbox:
             "One shipment: status, carrier, times, fee, fault flags, any known issue affecting it.",
             S(properties={"order_id": {"type": "string"}}, required=["order_id"]),
             self.t_get_order,
+        ))
+
+        self._add(ToolSpec(
+            "my_permissions",
+            "What the person you are talking to is allowed to do. Use for 'am I allowed to', 'can I approve this', 'what access do I have' - never answer those from their role name.",
+            S(properties={}),
+            self.t_my_permissions,
         ))
 
         self._add(ToolSpec(

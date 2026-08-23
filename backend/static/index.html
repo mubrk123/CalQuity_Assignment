@@ -322,7 +322,9 @@ async function pick(key){
   S.session=key; S.history=[]; S.ops=null;
   const s=S.sessions.find(x=>x.key===key);
   $('#whoName').textContent=s.display_name;
-  $('#whoRole').textContent=s.is_internal?s.role.replace('_',' '):`${s.account_id} · ${s.plan}`;
+  // The switcher list keeps account ids (it is the demo harness); the
+  // footer is the customer's own product view, so it shows the plan only.
+  $('#whoRole').textContent=s.is_internal?s.role.replace('_',' '):`${s.plan} plan`;
   $('#whoAv').textContent=(s.display_name||'?').slice(0,2).toUpperCase();
   buildMenu();
 
