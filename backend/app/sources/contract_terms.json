@@ -1,0 +1,111 @@
+{
+  "_doc": "Structured projection of the signed customer agreements in the pack. Precedence is evaluated CLAUSE BY CLAUSE, not document by document: Support Policy v3 s1 says an agreement 'may override these defaults', so a clause with addressed=false falls through to the policy default even though the account has a contract. Every quote is verified against the source PDF text at load time.",
+
+  "ACCT-001": {
+    "customer": "Northstar Logistics",
+    "source_doc": "05_Northstar_Logistics_Enterprise_Agreement",
+    "source_ref": "Northstar Logistics Enterprise Agreement",
+    "term_start": "2026-01-01",
+    "term_end": "2026-12-31",
+    "term_quote": "Term: 1 January 2026 to 31 December 2026",
+    "status": "ACTIVE",
+    "csm": "Priya Mehta",
+
+    "clauses": {
+      "sla_targets": {
+        "addressed": true,
+        "source_ref": "Northstar Logistics Enterprise Agreement s1",
+        "replaces_default_quote": "the following first-response targets replace ParcelPilot's standard support-policy targets",
+        "targets": {
+          "P1": { "amount": 15, "unit": "minutes", "coverage": "24x7", "quote": "P1: 15 minutes, 24x7" },
+          "P2": { "amount": 1, "unit": "hours", "coverage": "24x7", "quote": "P2: 1 hour", "interpretation": "enterprise_p2_coverage" },
+          "P3": { "amount": 8, "unit": "business_hours", "coverage": "business", "quote": "P3: 8 business hours" }
+        }
+      },
+
+      "support_coverage_restriction": {
+        "addressed": false
+      },
+
+      "cancellation_fee": {
+        "addressed": true,
+        "source_ref": "Northstar Logistics Enterprise Agreement s2",
+        "waived_before_pickup": true,
+        "waiver_ignores_elapsed_time": true,
+        "quote": "Northstar may cancel any BOOKED shipment before pickup with no cancellation fee, regardless of how long ago the shipment was booked.",
+        "after_pickup_quote": "Once a shipment is PICKED_UP, the standard return-to-origin process applies."
+      },
+
+      "failed_pickup_credit": {
+        "addressed": false,
+        "defers_to_sop": true,
+        "source_ref": "Northstar Logistics Enterprise Agreement s3",
+        "quote": "Unless this agreement states otherwise, the current ParcelPilot service-credit SOP applies."
+      },
+
+      "credit_monthly_cap": {
+        "addressed": true,
+        "source_ref": "Northstar Logistics Enterprise Agreement s3",
+        "monthly_cap_inr": 5000,
+        "quote": "Monthly aggregate service credits are capped at INR 5,000."
+      }
+    }
+  },
+
+  "ACCT-002": {
+    "customer": "LumenWorks",
+    "source_doc": "06_LumenWorks_Service_Agreement",
+    "source_ref": "LumenWorks Service Agreement",
+    "term_start": "2026-03-01",
+    "term_end": "2027-02-28",
+    "term_quote": "Term: 1 March 2026 to 28 February 2027",
+    "status": "ACTIVE",
+    "csm": "Arjun Rao",
+
+    "clauses": {
+      "sla_targets": {
+        "addressed": true,
+        "source_ref": "LumenWorks Service Agreement s1",
+        "targets": {
+          "P1": { "amount": 2, "unit": "business_hours", "coverage": "business", "quote": "P1: 2 business hours" },
+          "P2": { "amount": 4, "unit": "business_hours", "coverage": "business", "quote": "P2: 4 business hours" },
+          "P3": { "amount": 2, "unit": "business_days", "coverage": "business", "quote": "P3: 2 business days" }
+        },
+        "note": "These figures are numerically identical to the Support Policy v3 Growth row. The material difference in this agreement is the coverage restriction below, not the targets."
+      },
+
+      "support_coverage_restriction": {
+        "addressed": true,
+        "source_ref": "LumenWorks Service Agreement s1",
+        "no_weekend_coverage": true,
+        "no_after_hours_coverage": true,
+        "quote": "No weekend or after-hours support coverage."
+      },
+
+      "cancellation_fee": {
+        "addressed": true,
+        "waived_before_pickup": false,
+        "defers_to_sop": true,
+        "source_ref": "LumenWorks Service Agreement s2",
+        "quote": "No special cancellation-fee waiver applies. Use the current ParcelPilot Cancellation & Service Credit SOP."
+      },
+
+      "failed_pickup_credit": {
+        "addressed": true,
+        "replaces_default": true,
+        "source_ref": "LumenWorks Service Agreement s3",
+        "threshold_hours": 4,
+        "requires_carrier_fault": true,
+        "requires_no_customer_fault": true,
+        "credit_rule": "fixed",
+        "fixed_credit_inr": 300,
+        "quote": "If a pickup is more than 4 hours past the end of the scheduled pickup window, the carrier is at fault, and the customer is not at fault, LumenWorks receives a fixed INR 300 service credit. This clause replaces the default failed-pickup credit amount and timing threshold in the SOP.",
+        "note": "Because this clause REPLACES the default 2-hour threshold, LumenWorks is worse off than the default policy between 2 and 4 hours of delay: no credit is due in that band."
+      },
+
+      "credit_monthly_cap": {
+        "addressed": false
+      }
+    }
+  }
+}
