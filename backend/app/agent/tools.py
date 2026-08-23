@@ -81,8 +81,8 @@ class ToolSpec:
             },
         }
 
-def _order_view(o: Order) -> dict:
-    return {
+def _order_view(o: Order, include_notes: bool) -> dict:
+    d = {
         "order_id": o.order_id,
         "account_id": o.account_id,
         "carrier": o.carrier,
@@ -100,8 +100,14 @@ def _order_view(o: Order) -> dict:
             o.cancellation_requested_at.strftime("%Y-%m-%d %H:%M")
             if o.cancellation_requested_at else None
         ),
-        "notes": o.notes,
     }
+    if include_notes:
+        # Internal annotations on the dataset ("Customer asks to cancel"), not
+        # customer-facing record data. Shown to a customer they read as the
+        # topic of the question and steered the agent into answering something
+        # that was never asked.
+        d["notes"] = o.notes
+    return d
 
 def _ticket_view(t: Ticket, include_history: bool) -> dict:
     d = {
@@ -297,7 +303,7 @@ class Toolbox:
         if o is None:
             return dict(NOT_FOUND, requested=order_id)
         self._focus = o.account_id
-        out = {"found": True, "order": _order_view(o),
+        out = {"found": True, "order": _order_view(o, self.principal.is_internal),
                "reference_time": self.now.strftime("%Y-%m-%d %H:%M %A")}
         # Known issues ride along with the record they affect.
         matches = known_issues.for_order(o, self.now)
@@ -314,7 +320,7 @@ class Toolbox:
             orders = [o for o in orders if o.status == status.upper()]
         return {
             "count": len(orders),
-            "orders": [_order_view(o) for o in orders],
+            "orders": [_order_view(o, self.principal.is_internal) for o in orders],
         }
 
     def t_lookup_tickets(self, ticket_id: str | None = None,
@@ -350,7 +356,7 @@ class Toolbox:
         return {
             "count": len(orders),
             "account": acc.account_name if acc else "all accounts you may see",
-            "orders": [_order_view(o) for o in orders],
+            "orders": [_order_view(o, self.principal.is_internal) for o in orders],
         }
 
     def t_search_ticket_history(self, query: str, limit: int = 4) -> dict:
@@ -399,12 +405,56 @@ class Toolbox:
                           delay_hours_override=delay_hours_override)
         return {"found": True, "order_id": order_id, **d.to_dict()}
 
-    def t_evaluate_sla(self, ticket_id: str) -> dict:
-        t = self.store.ticket(ticket_id)
-        if t is None:
-            return dict(NOT_FOUND, requested=ticket_id)
-        acc = self.store.account(t.account_id)
-        return {"found": True, **sla.assess_ticket(t, acc, self.now).to_dict()}
+    def t_evaluate_sla(self, ticket_id: str | None = None,
+                       account_ref: str | None = None) -> dict:
+        """One ticket, or every open ticket in scope when no id is given."""
+        if ticket_id:
+            t = self.store.ticket(ticket_id)
+            if t is None:
+                return dict(NOT_FOUND, requested=ticket_id)
+            acc = self.store.account(t.account_id)
+            return {"found": True, **sla.assess_ticket(t, acc, self.now).to_dict()}
+
+        # "Which tickets are past target?" is a question about the set. Looping
+        # the engine locally costs microseconds; asking the model to loop costs
+        # one HTTP round trip per ticket and runs into the per-tool budget.
+        acc = (self.store.resolve_account(account_ref)
+               if account_ref or not self.principal.is_internal else None)
+        tickets = self.store.tickets(acc.account_id if acc else None, open_only=True)
+        breached, within, not_started = [], [], []
+        for t in tickets:
+            a = sla.assess_ticket(t, self.store.account(t.account_id), self.now)
+            ev = a.evaluation.to_dict()
+            row = {
+                "ticket_id": t.ticket_id,
+                "account": a.account_name,
+                "subject": t.subject,
+                "severity": a.severity.severity,
+                "target": ev["target"],
+                "elapsed": ev["elapsed"],
+                "outcome": a.decision.outcome,
+                "finding": a.decision.summary,
+            }
+            if ev["breached"]:
+                breached.append(row)
+            elif not ev["clock_started"]:
+                not_started.append(row)
+            else:
+                within.append(row)
+        return {
+            "found": True,
+            "scope": acc.account_name if acc else "all open tickets you may see",
+            "assessed": len(tickets),
+            "breached": breached,
+            "within_target": within,
+            "clock_not_started": not_started,
+            "note": (
+                f"Every open ticket in scope was assessed ({len(tickets)} of them). "
+                "This is the complete picture, nothing was skipped. A ticket under "
+                "clock_not_started is outside its account's support coverage right "
+                "now, so its target has not begun."
+            ),
+        }
 
     def t_get_source_reliability(self) -> dict:
         return {
@@ -723,8 +773,9 @@ class Toolbox:
 
         self._add(ToolSpec(
             "evaluate_sla",
-            "Authoritative severity, response target and breach status for a ticket.",
-            S(properties={"ticket_id": {"type": "string"}}, required=["ticket_id"]),
+            "Authoritative severity, response target and breach status. Pass ticket_id for one ticket. Pass NOTHING to assess every open ticket at once - use that for 'which tickets are past target', never loop over tickets one at a time.",
+            S(properties={"ticket_id": {"type": "string"},
+                          "account_ref": {"type": "string"}}),
             self.t_evaluate_sla,
         ))
 

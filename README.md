@@ -8,7 +8,10 @@ confirm.
 It runs two user contexts against the same data: a customer-facing assistant
 scoped to one account, and an internal one for support staff and managers.
 
-Live demo: _<add URL after deploying>_
+Live demo: **https://calquity-assignment-ykho.onrender.com**
+
+It runs on a free instance, which sleeps after inactivity, so the first request
+after a quiet period takes about a minute to wake.
 
 ## Running it
 
